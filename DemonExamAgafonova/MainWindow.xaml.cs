@@ -28,7 +28,7 @@ namespace DemonExamAgafonova
             InitializeComponent();
         }
 
-        private async void Button_Click(object sender, RoutedEventArgs e)
+        private void Button_Click(object sender, RoutedEventArgs e)
         {
             string login = txtUserName.Text;
             string password = txtPassw.Password;
@@ -38,40 +38,23 @@ namespace DemonExamAgafonova
                 MessageBox.Show("Значение обоих полей должны быть заполнены!", "Ошибка", MessageBoxButton.OK, MessageBoxImage.Warning);
                 return;
             }
+
             login = login.Trim();
             password = password.Trim();
 
-            if (string.IsNullOrEmpty(login) || string.IsNullOrEmpty(password))
+            using (var context = new HotelTable2Entities())
             {
-                MessageBox.Show("Значение обоих полей должны быть заполнены!", "Ошибка", MessageBoxButton.OK, MessageBoxImage.Warning);
-                return;
-            }
-            login = login.Trim();
-            password = password.Trim();
-
-            using (var Context = new HotelTable2Entities())
-            {
-                var user = Context.Users
-                    .Where(u => u.lastname == login && u.password == password).FirstOrDefault();
+                var user = context.Users.FirstOrDefault(u => u.username == login);
 
                 if (user == null)
                 {
-                    MessageBox.Show("Вы ввели неправильные логин и пароль. Проверьте введенные данные и попробуйте еще раз.", "Ошибка",
-                        MessageBoxButton.OK, MessageBoxImage.Warning);
+                    MessageBox.Show("Пользователь с таким логином не найден.", "Ошибка", MessageBoxButton.OK, MessageBoxImage.Warning);
                     return;
                 }
 
-                if (user.isLocked.HasValue && user.isLocked.Value)
+                if (user.isLocked == true)
                 {
                     MessageBox.Show("Вы заблокированы. Обратитесь к администратору.", "Доступ запрещен", MessageBoxButton.OK, MessageBoxImage.Warning);
-                    return;
-                }
-                if (user.lastLoginDate != null && (DateTime.Now - user.lastLoginDate.Value).TotalDays > 30 && user.role != "admin")
-                {
-                    user.isLocked = true;
-                    Context.SaveChanges();
-                    MessageBox.Show("Ваша учетная запись заблокирована из-за длительного отсутствия входа. Обратитесь к администратору.", "Доступ запрещен",
-                        MessageBoxButton.OK, MessageBoxImage.Warning);
                     return;
                 }
 
@@ -79,22 +62,27 @@ namespace DemonExamAgafonova
                 {
                     user.lastLoginDate = DateTime.Now;
                     user.FailedLoginAttempts = 0;
-                    Context.SaveChanges();
-                    MessageBox.Show("Вы успешно авторизовались. Добро пожаловать!", "Успех", MessageBoxButton.OK,
-                        MessageBoxImage.Information);
+                    context.SaveChanges();
+                    MessageBox.Show("Вы успешно авторизовались!", "Успех", MessageBoxButton.OK, MessageBoxImage.Information);
+
                     AdminWindow adminWindow = new AdminWindow();
                     adminWindow.Show();
                     this.Close();
                 }
-
                 else
                 {
-
-                    user.FailedLoginAttempts++;
-                    Context.SaveChanges();
-                    MessageBox.Show("Неверный пароль.", "Ошибка", MessageBoxButton.OK, MessageBoxImage.Warning);
-                    return;
-
+                    user.FailedLoginAttempts = (user.FailedLoginAttempts ?? 0) + 1;
+                    if (user.FailedLoginAttempts >= 3)
+                    {
+                        user.isLocked = true;
+                        MessageBox.Show("Вы заблокированы из-за 3 неудачных попыток входа.", "Доступ запрещен", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    }
+                    else
+                    {
+                        int attemptsLeft = 3 - (user.FailedLoginAttempts ?? 0);
+                        MessageBox.Show($"Неправильный пароль. Осталось попыток: {attemptsLeft}", "Ошибка", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    }
+                    context.SaveChanges();
                 }
             }
         }
